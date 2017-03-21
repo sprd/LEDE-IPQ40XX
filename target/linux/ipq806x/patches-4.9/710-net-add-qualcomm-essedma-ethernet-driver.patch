@@ -46,7 +46,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +
 --- /dev/null
 +++ b/drivers/net/ethernet/qualcomm/essedma/edma.c
-@@ -0,0 +1,2168 @@
+@@ -0,0 +1,2164 @@
 +/*
 + * Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
 + *
@@ -647,7 +647,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +
 +			/* Get Rx port ID from switch */
 +			port_id = (rd->rrd1 >> EDMA_PORT_ID_SHIFT) & EDMA_PORT_ID_MASK;
-+			if ((!port_id) || (port_id > EDMA_MAX_PORTID_SUPPORTED)) {
++			if (!port_id) {
 +				dev_err(&pdev->dev, "Invalid RRD source port bit set");
 +				for (i = 0; i < num_rfds; i++) {
 +					edma_clean_rfd(erdr, sw_next_to_clean);
@@ -661,7 +661,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +			 * If the interface isn't setup, we have to drop the
 +			 * incoming data for now.
 +			 */
-+			netdev = edma_cinfo->portid_netdev_lookup_tbl[port_id];
++			netdev = edma_cinfo->netdev[0];
 +			if (!netdev) {
 +				edma_clean_rfd(erdr, sw_next_to_clean);
 +				sw_next_to_clean = (sw_next_to_clean + 1) &
@@ -764,13 +764,11 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +			edma_receive_checksum(rd, skb);
 +
 +			/* Process VLAN HW acceleration indication provided by HW */
-+			if (unlikely(adapter->default_vlan_tag != rd->rrd4)) {
-+				vlan = rd->rrd4;
-+				if (likely(rd->rrd7 & EDMA_RRD_CVLAN))
-+					__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vlan);
-+				else if (rd->rrd1 & EDMA_RRD_SVLAN)
-+					__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021AD), vlan);
-+			}
++			vlan = rd->rrd4;
++			if (likely(rd->rrd7 & EDMA_RRD_CVLAN))
++				__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vlan);
++			else if (rd->rrd1 & EDMA_RRD_SVLAN)
++				__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021AD), vlan);
 +
 +			/* Update rx statistics */
 +			adapter->stats.rx_packets++;
@@ -1439,8 +1437,6 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +	/* Check and mark VLAN tag offload */
 +	if (skb_vlan_tag_present(skb))
 +		flags_transmit |= EDMA_VLAN_TX_TAG_INSERT_FLAG;
-+	else if (adapter->default_vlan_tag)
-+		flags_transmit |= EDMA_VLAN_TX_TAG_INSERT_DEFAULT_FLAG;
 +
 +	/* Check and mark checksum offload */
 +	if (likely(skb->ip_summed == CHECKSUM_PARTIAL))
@@ -2217,7 +2213,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +}
 --- /dev/null
 +++ b/drivers/net/ethernet/qualcomm/essedma/edma.h
-@@ -0,0 +1,447 @@
+@@ -0,0 +1,445 @@
 +/*
 + * Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
 + *
@@ -2262,7 +2258,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +#include "ess_edma.h"
 +
 +#define EDMA_CPU_CORES_SUPPORTED 4
-+#define EDMA_MAX_PORTID_SUPPORTED 5
++#define EDMA_MAX_PORTID_SUPPORTED 1
 +#define EDMA_MAX_VLAN_SUPPORTED  EDMA_MAX_PORTID_SUPPORTED
 +#define EDMA_MAX_PORTID_BITMAP_INDEX (EDMA_MAX_PORTID_SUPPORTED + 1)
 +#define EDMA_MAX_PORTID_BITMAP_SUPPORTED 0x1f	/* 0001_1111 = 0x1f */
@@ -2531,8 +2527,6 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +	struct edma_rfd_desc_ring *rfd_ring[8]; /* 8 Rx queues */
 +	struct platform_device *pdev; /* device structure */
 +	struct net_device *netdev[EDMA_MAX_PORTID_SUPPORTED];
-+	struct net_device *portid_netdev_lookup_tbl[EDMA_MAX_PORTID_BITMAP_INDEX];
-+	struct ctl_table_header *edma_ctl_table_hdr;
 +	int num_gmac;
 +	struct edma_ethtool_statistics edma_ethstats; /* ethtool stats */
 +	int num_rx_queues; /* number of rx queue */
@@ -2667,7 +2661,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +#endif /* _EDMA_H_ */
 --- /dev/null
 +++ b/drivers/net/ethernet/qualcomm/essedma/edma_axi.c
-@@ -0,0 +1,1220 @@
+@@ -0,0 +1,1191 @@
 +/*
 + * Copyright (c) 2014 - 2016, The Linux Foundation. All rights reserved.
 + *
@@ -3225,23 +3219,23 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 + *	Describe the operations supported by registered netdevices
 + *
 + * static const struct net_device_ops edma_axi_netdev_ops = {
-+ *	.ndo_open               = edma_open,
-+ *	.ndo_stop               = edma_close,
-+ *	.ndo_start_xmit         = edma_xmit_frame,
-+ *	.ndo_set_mac_address    = edma_set_mac_addr,
++ *	.ndo_open		= edma_open,
++ *	.ndo_stop		= edma_close,
++ *	.ndo_start_xmit		= edma_xmit_frame,
++ *	.ndo_set_mac_address	= edma_set_mac_addr,
 + * }
 + */
 +static const struct net_device_ops edma_axi_netdev_ops = {
-+	.ndo_open               = edma_open,
-+	.ndo_stop               = edma_close,
-+	.ndo_start_xmit         = edma_xmit,
-+	.ndo_set_mac_address    = edma_set_mac_addr,
++	.ndo_open		= edma_open,
++	.ndo_stop		= edma_close,
++	.ndo_start_xmit		= edma_xmit,
++	.ndo_set_mac_address	= edma_set_mac_addr,
 +#ifdef CONFIG_RFS_ACCEL
-+	.ndo_rx_flow_steer      = edma_rx_flow_steer,
-+	.ndo_register_rfs_filter = edma_register_rfs_filter,
++	.ndo_rx_flow_steer	= edma_rx_flow_steer,
++	.ndo_register_rfs_filter= edma_register_rfs_filter,
 +	.ndo_get_default_vlan_tag = edma_get_default_vlan_tag,
 +#endif
-+	.ndo_get_stats          = edma_get_stats,
++	.ndo_get_stats		= edma_get_stats,
 +	.ndo_change_mtu		= edma_change_mtu,
 +};
 +
@@ -3284,7 +3278,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +
 +	edma_cinfo->pdev = pdev;
 +
-+	of_property_read_u32(np, "qcom,num_gmac", &edma_cinfo->num_gmac);
++	of_property_read_u32(np, "qcom,num-gmac", &edma_cinfo->num_gmac);
 +	if (edma_cinfo->num_gmac > EDMA_MAX_PORTID_SUPPORTED) {
 +		pr_err("Invalid DTSI Entry for qcom,num_gmac\n");
 +		err = -EINVAL;
@@ -3331,7 +3325,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +	hw->rx_intr_mask = EDMA_RX_IMR_NORMAL_MASK;
 +
 +	of_property_read_u32(np, "qcom,page-mode", &edma_cinfo->page_mode);
-+	of_property_read_u32(np, "qcom,rx_head_buf_size",
++	of_property_read_u32(np, "qcom,rx-head-buf-size",
 +			     &hw->rx_head_buff_size);
 +
 +	if (overwrite_mode) {
@@ -3427,7 +3421,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +		}
 +	}
 +
-+	if (of_property_read_bool(np, "qcom,mdio_supported")) {
++	if (of_property_read_bool(np, "qcom,mdio-supported")) {
 +		mdio_node = of_find_compatible_node(NULL, NULL,
 +						    "qcom,ipq4019-mdio");
 +		if (!mdio_node) {
@@ -3502,20 +3496,20 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +
 +		adapter[i]->edma_cinfo = edma_cinfo;
 +		edma_netdev[i]->netdev_ops = &edma_axi_netdev_ops;
-+		edma_netdev[i]->features = NETIF_F_HW_CSUM | NETIF_F_RXCSUM
-+				      | NETIF_F_HW_VLAN_CTAG_TX
-+				      | NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_SG |
-+				      NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_GRO;
++		edma_netdev[i]->features = NETIF_F_HW_CSUM | NETIF_F_RXCSUM |
++			NETIF_F_HW_VLAN_CTAG_TX |
++			NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_SG |
++			NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_GRO;
 +		edma_netdev[i]->hw_features = NETIF_F_HW_CSUM | NETIF_F_RXCSUM |
-+				NETIF_F_HW_VLAN_CTAG_RX
-+				| NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6 |
-+				NETIF_F_GRO;
++			NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_CTAG_TX |
++			NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6 |
++			NETIF_F_GRO;
 +		edma_netdev[i]->vlan_features = NETIF_F_HW_CSUM | NETIF_F_SG |
-+					   NETIF_F_TSO | NETIF_F_TSO6 |
-+					   NETIF_F_GRO;
++			NETIF_F_TSO | NETIF_F_TSO6 |
++			NETIF_F_GRO;
 +		edma_netdev[i]->wanted_features = NETIF_F_HW_CSUM | NETIF_F_SG |
-+					     NETIF_F_TSO | NETIF_F_TSO6 |
-+					     NETIF_F_GRO;
++			NETIF_F_TSO | NETIF_F_TSO6 |
++			NETIF_F_GRO;
 +
 +#ifdef CONFIG_RFS_ACCEL
 +		edma_netdev[i]->features |=  NETIF_F_RXHASH | NETIF_F_NTUPLE;
@@ -3529,14 +3523,8 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +		 */
 +		if (!is_valid_ether_addr(edma_netdev[i]->dev_addr)) {
 +			random_ether_addr(edma_netdev[i]->dev_addr);
-+			pr_info("EDMA using MAC@ - using");
-+			pr_info("%02x:%02x:%02x:%02x:%02x:%02x\n",
-+			*(edma_netdev[i]->dev_addr),
-+			*(edma_netdev[i]->dev_addr + 1),
-+			*(edma_netdev[i]->dev_addr + 2),
-+			*(edma_netdev[i]->dev_addr + 3),
-+			*(edma_netdev[i]->dev_addr + 4),
-+			*(edma_netdev[i]->dev_addr + 5));
++			pr_info("EDMA using random MAC@: %pM\n",
++				edma_netdev[i]->dev_addr);
 +		}
 +
 +		err = register_netdev(edma_netdev[i]);
@@ -3561,9 +3549,6 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +#endif
 +	}
 +
-+	for (i = 0; i < EDMA_MAX_PORTID_BITMAP_INDEX; i++)
-+		edma_cinfo->portid_netdev_lookup_tbl[i] = NULL;
-+
 +	for_each_available_child_of_node(np, pnp) {
 +		const uint32_t *vlan_tag = NULL;
 +		int len;
@@ -3575,7 +3560,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +			break;
 +
 +		/* Populate port-id to netdev lookup table */
-+		vlan_tag = of_get_property(pnp, "vlan_tag", &len);
++		vlan_tag = of_get_property(pnp, "vlan-tag", &len);
 +		if (!vlan_tag) {
 +			pr_err("Vlan tag parsing Failed.\n");
 +			goto err_rmap_alloc_fail;
@@ -3586,25 +3571,14 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +		portid_bmp = of_read_number(vlan_tag, 1);
 +		adapter[idx]->dp_bitmap = portid_bmp;
 +
-+		portid_bmp = portid_bmp >> 1; /* We ignore CPU Port bit 0 */
-+		while (portid_bmp) {
-+			int port_bit = ffs(portid_bmp);
-+
-+			if (port_bit > EDMA_MAX_PORTID_SUPPORTED)
-+				goto err_rmap_alloc_fail;
-+			edma_cinfo->portid_netdev_lookup_tbl[port_bit] =
-+				edma_netdev[idx];
-+			portid_bmp &= ~(1 << (port_bit - 1));
-+		}
-+
-+		if (!of_property_read_u32(pnp, "qcom,poll_required",
++		if (!of_property_read_u32(pnp, "qcom,poll-required",
 +					  &adapter[idx]->poll_required)) {
 +			if (adapter[idx]->poll_required) {
-+				of_property_read_u32(pnp, "qcom,phy_mdio_addr",
++				of_property_read_u32(pnp, "qcom,phy-mdio-addr",
 +						     &adapter[idx]->phy_mdio_addr);
-+				of_property_read_u32(pnp, "qcom,forced_speed",
++				of_property_read_u32(pnp, "qcom,forced-speed",
 +						     &adapter[idx]->forced_speed);
-+				of_property_read_u32(pnp, "qcom,forced_duplex",
++				of_property_read_u32(pnp, "qcom,forced-duplex",
 +						     &adapter[idx]->forced_duplex);
 +
 +				/* create a phyid using MDIO bus id
@@ -3622,14 +3596,6 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +		}
 +
 +		idx++;
-+	}
-+
-+	edma_cinfo->edma_ctl_table_hdr = register_net_sysctl(&init_net,
-+							     "net/edma",
-+							     edma_table);
-+	if (!edma_cinfo->edma_ctl_table_hdr) {
-+		dev_err(&pdev->dev, "edma sysctl table hdr not registered\n");
-+		goto err_unregister_sysctl_tbl;
 +	}
 +
 +	/* Disable all 16 Tx and 8 rx irqs */
@@ -3750,7 +3716,7 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +					    &edma_adjust_link,
 +					    PHY_INTERFACE_MODE_SGMII);
 +			if (IS_ERR(adapter[i]->phydev)) {
-+				dev_dbg(&pdev->dev, "PHY attach FAIL");
++				dev_err(&pdev->dev, "PHY attach FAIL");
 +				err = -EIO;
 +				goto edma_phy_attach_fail;
 +			} else {
@@ -3854,7 +3820,6 @@ Signed-off-by: Christian Lamparter <chunkeey@gmail.com>
 +
 +	del_timer_sync(&edma_stats_timer);
 +	edma_free_irqs(adapter);
-+	unregister_net_sysctl_table(edma_cinfo->edma_ctl_table_hdr);
 +	edma_free_tx_resources(edma_cinfo);
 +	edma_free_rx_resources(edma_cinfo);
 +	edma_free_tx_rings(edma_cinfo);
