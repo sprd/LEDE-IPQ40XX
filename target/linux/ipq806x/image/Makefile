@@ -73,6 +73,18 @@ define Device/DniImage
 endef
 DEVICE_VARS += NETGEAR_BOARD_ID NETGEAR_HW_ID
 
+define Device/FitDniImage
+	$(call Device/FitImage)
+	PROFILES += $$(DEVICE_NAME)
+	FILESYSTEMS := squashfs
+	NETGEAR_BOARD_ID :=
+	NETGEAR_HW_ID :=
+	UBINIZE_OPTS := -E 5
+	IMAGES := factory.img sysupgrade.tar
+	IMAGE/factory.img := append-kernel | pad-offset $$$$(BLOCKSIZE) 64 | append-uImage-fakeroot-hdr | pad-to $$$$(KERNEL_SIZE) | append-ubi | netgear-dni
+	IMAGE/sysupgrade.tar := append-kernel | pad-offset $$$$(BLOCKSIZE) 64 | append-uImage-fakeroot-hdr | sysupgrade-tar kernel=$$$$@ | append-metadata
+endef
+
 define Device/TpSafeImage
 	PROFILES += $$(DEVICE_NAME)
 	FILESYSTEMS := squashfs
@@ -224,6 +236,20 @@ define Device/R7800
 	DEVICE_PACKAGES := ath10k-firmware-qca9984
 endef
 
+define Device/RBR50
+	$(call Device/FitDniImage)
+	DEVICE_DTS := qcom-ipq4019-rbr50
+	KERNEL_LOADADDR := 0x80208000
+	KERNEL_SIZE := 3932160
+	NETGEAR_BOARD_ID := RBR50
+	NETGEAR_HW_ID := 29765352+0+4000+512+2x2+2x2+4x4
+	BLOCKSIZE := 128k
+	PAGESIZE := 2048
+	BOARD_NAME := rbr50
+	DEVICE_TITLE := Netgear Orbi RBR50/RBS50
+	DEVICE_PACKAGES := kmod-usb-phy-qcom-ipq4019 ath10k-firmware-qca9984 ipq-wifi-rbr50
+endef
+
 define Build/copy-file
 	cat "$(1)" > "$@"
 endef
@@ -279,6 +305,6 @@ define Device/VR2600v
 endef
 
 TARGET_DEVICES += AP148 AP148-legacy C2600 D7800 DB149 EA8500 FRITZ4040 R7500 \
-		  R7500v2 R7800 RT-AC58U NBG6817 VR2600v
+		  R7500v2 R7800 RBR50 RT-AC58U NBG6817 VR2600v
 
 $(eval $(call BuildImage))

@@ -1,0 +1,22 @@
+--- linux-4.9.20/arch/arm/boot/dts/qcom-ipq4019.dtsi.orig	2017-04-08 20:57:01.703796302 +0200
++++ linux-4.9.20/arch/arm/boot/dts/qcom-ipq4019.dtsi	2017-04-08 20:59:22.210773755 +0200
+@@ -292,6 +292,19 @@
+ 			clock-names = "core";
+ 		};
+ 
++		sdhci@7824000 {
++			compatible = "qcom,sdhci-msm-v4";
++			reg = <0x7824900 0x11c>,
++			      <0x7824000 0x800>;
++			interrupts = <0 123 IRQ_TYPE_NONE>,
++				     <0 138 IRQ_TYPE_NONE>;
++			bus-width = <8>;
++			clocks = <&gcc GCC_SDCC1_APPS_CLK>,
++				 <&gcc GCC_SDCC1_AHB_CLK>;
++			clock-names = "core", "iface";
++			status = "disabled";
++		};
++
+ 		serial@78af000 {
+ 			compatible = "qcom,msm-uartdm-v1.4", "qcom,msm-uartdm";
+ 			reg = <0x78af000 0x200>;
