@@ -1,0 +1,36 @@
+From 69f50b2694e9e9a3e927c21b900112d7adb581c9 Mon Sep 17 00:00:00 2001
+From: Ram Chandra Jangir <rjangir@codeaurora.org>
+Date: Tue, 28 Mar 2017 14:00:00 +0530
+Subject: [PATCH 2/5] net/phy: Export phy statemachine API
+
+When any port with link-detection enabled changes group
+we need to start/stop phy detection with phy_start_machine()
+and phy_stop_machine() at runtime for those specific ports
+
+Signed-off-by :Ram Chandra Jangir <rjangir@codeaurora.org>
+---
+ drivers/net/phy/phy.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/net/phy/phy.c b/drivers/net/phy/phy.c
+index 00fe2ab..4058d5c 100644
+--- a/drivers/net/phy/phy.c
++++ b/drivers/net/phy/phy.c
+@@ -650,6 +650,7 @@ void phy_start_machine(struct phy_device *phydev)
+ {
+	queue_delayed_work(system_power_efficient_wq, &phydev->state_queue, HZ);
+ }
++EXPORT_SYMBOL(phy_start_machine);
+
+ /**
+  * phy_trigger_machine - trigger the state machine to run
+@@ -687,6 +688,7 @@ void phy_stop_machine(struct phy_device *phydev)
+		phydev->state = PHY_UP;
+	mutex_unlock(&phydev->lock);
+ }
++EXPORT_SYMBOL(phy_stop_machine);
+
+ /**
+  * phy_error - enter HALTED state for this PHY device
+--
+2.7.2
