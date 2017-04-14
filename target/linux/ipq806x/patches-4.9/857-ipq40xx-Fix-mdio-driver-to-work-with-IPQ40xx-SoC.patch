@@ -24,7 +24,7 @@ index 335d531..e969f06 100644
  #define MDIO_CTRL_0_REG		0x40
  #define MDIO_CTRL_1_REG		0x44
 @@ -122,11 +123,60 @@ static int ipq40xx_mdio_write(struct mii_bus *bus, int mii_id, int regnum,
-	return 0;
+ 	return 0;
  }
 
 +static int ipq40xx_phy_reset(struct platform_device *pdev)
@@ -42,7 +42,7 @@ index 335d531..e969f06 100644
 +	ret = of_get_named_gpio(mdio_node, "phy-reset-gpio", 0);
 +	if (ret < 0) {
 +		dev_err(&pdev->dev, "Could not find phy-reset-gpio\n");
-+		return ret;
++		return ret == -ENOENT ? 0 : ret;
 +	}
 +
 +	phy_reset_gpio_number = ret;
@@ -72,8 +72,8 @@ index 335d531..e969f06 100644
 +
  static int ipq40xx_mdio_probe(struct platform_device *pdev)
  {
-	struct ipq40xx_mdio_data *am;
-	struct resource *res;
+ 	struct ipq40xx_mdio_data *am;
+ 	struct resource *res;
 -	int i;
 +	int i, ret;
 +
@@ -83,18 +83,18 @@ index 335d531..e969f06 100644
 +		return ret;
 +	}
 
-	am = devm_kzalloc(&pdev->dev, sizeof(*am), GFP_KERNEL);
-	if (!am)
+ 	am = devm_kzalloc(&pdev->dev, sizeof(*am), GFP_KERNEL);
+ 	if (!am)
 @@ -151,8 +201,8 @@ static int ipq40xx_mdio_probe(struct platform_device *pdev)
-	writel(CTRL_0_REG_DEFAULT_VALUE, am->membase + MDIO_CTRL_0_REG);
-
-	am->mii_bus->name = "ipq40xx_mdio";
+ 	writel(CTRL_0_REG_DEFAULT_VALUE, am->membase + MDIO_CTRL_0_REG);
+ 
+ 	am->mii_bus->name = "ipq40xx_mdio";
 -	am->mii_bus->read = ipq40xx_mdio_read;
 -	am->mii_bus->write = ipq40xx_mdio_write;
 +	am->mii_bus->read = &ipq40xx_mdio_read;
 +	am->mii_bus->write = &ipq40xx_mdio_write;
-	memcpy(am->mii_bus->irq, am->phy_irq, sizeof(am->phy_irq));
-	am->mii_bus->priv = am;
-	am->mii_bus->parent = &pdev->dev;
+ 	memcpy(am->mii_bus->irq, am->phy_irq, sizeof(am->phy_irq));
+ 	am->mii_bus->priv = am;
+ 	am->mii_bus->parent = &pdev->dev;
 --
 2.7.2
