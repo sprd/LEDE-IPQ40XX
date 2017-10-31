@@ -1,0 +1,12 @@
+Index: ofp-2.0.1/configure.ac
+===================================================================
+--- ofp-2.0.1.orig/configure.ac	2017-04-06 22:51:36.000000000 +0800
++++ ofp-2.0.1/configure.ac	2017-09-20 16:29:55.939681794 +0800
+@@ -1,6 +1,6 @@
+ AC_PREREQ([2.69])
+ AC_INIT([OpenFastPath],
+-	m4_esyscmd(./scripts/git_hash.sh .),
++	m4_esyscmd_s(./scripts/git_hash.sh .),
+ 	[sorin.vultureanu at enea.com],
+ 	[openfastpath],
+ 	[http://www.enea.com])
